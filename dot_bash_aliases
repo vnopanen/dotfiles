@@ -1,0 +1,42 @@
+cleantaint() {
+  local repo="${PWD}"
+  local taints
+
+  taints="$(find "$repo" -name '*.taint' -type f | sort)"
+  if [ -z "$taints" ]; then
+    echo "no .taint files found"
+    return 0
+  fi
+
+  printf '%s\n' "$taints"
+  read -r -p "clear these .taint files? [y/N] " ans
+  case "$ans" in
+    y|Y|yes|YES)
+      printf '%s\n' "$taints" | xargs -r rm -f
+      ;;
+    *)
+      echo "aborted"
+      ;;
+  esac
+}
+
+
+alias ts="tailscale status | grep -v offline"
+alias baud="echo 'mavlink start -d /dev/ttyS1 -r 1000 -m minimal -x -z -b' > /dev/ttyUSB0"
+alias minicoms="minicom -S ~/login.txt"
+alias usbi="~/usbi.sh"
+alias g="git status"
+alias lg="lazygit"
+alias ldocker="lazydocker"
+alias esp-source=". ~/esp/esp-idf/export.sh"
+alias ali="nano ~/.bash_aliases"
+alias ".."="cd .."
+alias "..."="cd ../.."
+alias "...."="cd ../../.."
+alias cz="EDITOR=nano chezmoi"
+alias fd="fdfind"
+alias ccodex="~/codex-docker/bin/codex"
+
+if [ -f "$HOME/.bash_aliases_extra" ]; then
+  . "$HOME/.bash_aliases_extra"
+fi
