@@ -1,0 +1,20 @@
+theme = "autumn_night_transparent"
+
+[editor.cursor-shape]
+normal = "block"
+insert = "bar"
+select = "underline"
+
+[keys.normal]
+space.L = ":sh printf '%%s' \"$(realpath -- \"%{buffer_name}\")\" | \"${XDG_CONFIG_HOME:-$HOME/.config}/helix/hx-copy.sh\""
+space.m = [":write", ':run-shell-command xdg-open "%{buffer_name}" >/dev/null 2>&1 &']
+b = ":sh git show --no-patch --format='%%h (%%an: %%ar): %%s' $(git blame -p \"%{buffer_name}\" -L%{cursor_line},+1 | head -1 | cut -d' ' -f1)"
+
+[editor.file-picker]
+hidden = false
+ignore = true
+git-ignore = true
+
+[editor.statusline]
+left = ["mode", "spinner", "file-name", "read-only-indicator", "file-modification-indicator", "version-control"]
+right = ["diagnostics", "selections", "register", "position", "total-line-numbers", "file-encoding"]
