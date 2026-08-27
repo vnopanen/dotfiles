@@ -26,6 +26,7 @@ alias baud="echo 'mavlink start -d /dev/ttyS1 -r 1000 -m minimal -x -z -b' > /de
 alias minicoms="minicom -S ~/login.txt"
 alias usbi="~/usbi.sh"
 alias g="git status"
+alias gr="git rev-parse --short HEAD"
 alias lg="lazygit"
 alias ldocker="lazydocker"
 alias esp-source=". ~/esp/esp-idf/export.sh"
