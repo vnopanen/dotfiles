@@ -20,6 +20,23 @@ cleantaint() {
   esac
 }
 
+pc() {
+  local device=/dev/ttyUSB0
+  local arg
+  local -a picocom_args=()
+
+  for arg in "$@"; do
+    case "$arg" in
+      /dev/*)
+        device="$arg"
+        ;;
+      [0-9]) device="/dev/ttyUSB${arg}" ;;
+      *) picocom_args+=("$arg") ;;
+    esac
+  done
+
+  picocom -b 115200 "${picocom_args[@]}" "$device"
+}
 
 alias ts="tailscale status | grep -v offline"
 alias baud="echo 'mavlink start -d /dev/ttyS1 -r 1000 -m minimal -x -z -b' > /dev/ttyUSB0"
