@@ -53,7 +53,11 @@ alias ".."="cd .."
 alias "..."="cd ../.."
 alias "...."="cd ../../.."
 alias cz="EDITOR=nano chezmoi"
-alias fd="fdfind"
+if command -v fdfind >/dev/null 2>&1; then
+  alias fd="fdfind"
+elif command -v fd >/dev/null 2>&1; then
+  alias fd="fd"
+fi
 alias ccodex="~/codex-docker/bin/codex"
 alias tarx="tar --one-top-level --blocking-factor=2048 --checkpoint=1 --checkpoint-action='ttyout=\rtar: processed %u MB' -xaf"
 alias rsyncf="rsync -L --checksum --progress -ii"
