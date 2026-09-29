@@ -7,3 +7,8 @@ name = "python"
 language-servers = ["ruff", "pyright"]
 rulers = [100]
 formatter = { command = "ruff", args = ["format", "-"] }
+
+[[language]]
+name = "nix"
+auto-format = true
+formatter = { command = "nixfmt" }
