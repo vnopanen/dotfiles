@@ -5,6 +5,9 @@ normal = "block"
 insert = "bar"
 select = "underline"
 
+[editor.soft-wrap]
+enable = true
+
 [keys.normal]
 space.L = ":sh printf '%%s' \"$(realpath -- \"%{buffer_name}\")\" | \"${XDG_CONFIG_HOME:-$HOME/.config}/helix/hx-copy.sh\""
 space.m = [":write", ':run-shell-command xdg-open "%{buffer_name}" >/dev/null 2>&1 &']
