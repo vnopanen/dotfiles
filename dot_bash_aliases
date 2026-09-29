@@ -61,6 +61,7 @@ fi
 alias ccodex="~/codex-docker/bin/codex"
 alias tarx="tar --one-top-level --blocking-factor=2048 --checkpoint=1 --checkpoint-action='ttyout=\rtar: processed %u MB' -xaf"
 alias rsyncf="rsync -L --checksum --progress -ii"
+alias y="yazi"
 
 if [ -f "$HOME/.bash_aliases_extra" ]; then
   . "$HOME/.bash_aliases_extra"
