@@ -38,6 +38,20 @@ pc() {
   picocom -b 115200 "${picocom_args[@]}" "$device"
 }
 
+_sdiff_source() {
+  if [[ -f $1 ]]; then
+    nl -ba -- "$1"
+  else
+    printf '%s\n' "$1" | nl -ba
+  fi
+}
+
+das() {
+  sdiff -s \
+    <(_sdiff_source "$1") \
+    <(_sdiff_source "$2")
+}
+
 alias ts="tailscale status | grep -v offline"
 alias baud="echo 'mavlink start -d /dev/ttyS1 -r 1000 -m minimal -x -z -b' > /dev/ttyUSB0"
 alias minicoms="minicom -S ~/login.txt"
