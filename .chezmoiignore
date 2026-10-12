@@ -1,0 +1,15 @@
+{{- $affected := false -}}
+
+{{- if eq .chezmoi.os "linux" -}}
+  {{- if and
+      (eq .chezmoi.osRelease.id "ubuntu")
+      (eq .chezmoi.osRelease.versionID "26.04") -}}
+    {{- $product := output "cat" "/sys/devices/virtual/dmi/id/product_name" | trim -}}
+    {{- $affected = eq $product "21BV00G1MX" -}}
+  {{- end -}}
+{{- end -}}
+
+{{- if not $affected }}
+.config/wireplumber/
+.local/share/wireplumber/scripts/
+{{- end }}
