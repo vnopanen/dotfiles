@@ -1,0 +1,3 @@
+shell-integration-features = ssh-env,ssh-terminfo
+mouse-scroll-multiplier = 1
+font-feature = -calt
