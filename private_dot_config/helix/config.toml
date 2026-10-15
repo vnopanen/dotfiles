@@ -1,5 +1,8 @@
 theme = "autumn_night_transparent"
 
+[editor]
+scroll-lines = 1
+
 [editor.cursor-shape]
 normal = "block"
 insert = "bar"
