@@ -1,0 +1,13 @@
+[Unit]
+Description=Re-modeset HDMI output when GNOME wakes the displays
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/gnome-hdmi-wake-modeset
+Restart=on-failure
+RestartSec=2s
+
+[Install]
+WantedBy=graphical-session.target

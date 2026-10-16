@@ -13,3 +13,11 @@
 .config/wireplumber/
 .local/share/wireplumber/scripts/
 {{- end }}
+
+{{- if not (and
+    (eq .chezmoi.os "linux")
+    (eq .chezmoi.osRelease.id "ubuntu")
+    (eq .chezmoi.osRelease.versionID "26.04")) }}
+.local/bin/gnome-hdmi-wake-modeset
+.config/systemd/user/gnome-hdmi-wake-modeset.service
+{{- end }}

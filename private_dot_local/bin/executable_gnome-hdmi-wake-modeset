@@ -1,0 +1,204 @@
+#!/usr/bin/python3
+"""Re-modeset HDMI-1 after GNOME wakes from an actual blanked state.
+
+Mutter sometimes keeps the HDMI connector configured after the monitor wakes,
+but does not restore the signal. Applying an alternate refresh rate and then
+the original mode forces the missing modeset without changing the layout.
+
+The Unblank lock screen extension can keep the lock screen visible without
+blanking the displays. Only react to the unlock transition if the screen
+saver first reported itself active, which avoids modesetting after an
+ordinary lock/unlock while the lock screen stayed visible.
+
+Tracking: https://bugs.launchpad.net/ubuntu/+source/mutter/+bug/2169932
+"""
+
+import os
+import logging
+import sys
+import time
+import traceback
+
+import gi
+
+gi.require_version("Gio", "2.0")
+from gi.repository import Gio, GLib
+
+
+DISPLAY_CONFIG_BUS = "org.gnome.Mutter.DisplayConfig"
+DISPLAY_CONFIG_PATH = "/org/gnome/Mutter/DisplayConfig"
+SCREEN_SAVER_BUS = "org.gnome.ScreenSaver"
+SCREEN_SAVER_PATH = "/org/gnome/ScreenSaver"
+TARGET_CONNECTOR = os.environ.get("GNOME_HDMI_CONNECTOR", "HDMI-1")
+ALT_REFRESH = float(os.environ.get("GNOME_HDMI_ALT_REFRESH", "49.99"))
+UNLOCK_DELAY_SECONDS = float(os.environ.get("GNOME_HDMI_UNLOCK_DELAY", "2.0"))
+MODE_SETTLE_SECONDS = float(os.environ.get("GNOME_HDMI_MODE_SETTLE", "0.8"))
+MIN_RETRY_INTERVAL_SECONDS = 3.0
+LOG = logging.getLogger("gnome-hdmi-wake-modeset")
+
+
+class HdmiRemodesetter:
+    def __init__(self):
+        self.display_config = Gio.DBusProxy.new_for_bus_sync(
+            Gio.BusType.SESSION,
+            Gio.DBusProxyFlags.NONE,
+            None,
+            DISPLAY_CONFIG_BUS,
+            DISPLAY_CONFIG_PATH,
+            DISPLAY_CONFIG_BUS,
+            None,
+        )
+        self.last_run = 0.0
+        self.running = False
+        self.was_blank = False
+
+    def get_state(self):
+        return self.display_config.call_sync(
+            "GetCurrentState", None, Gio.DBusCallFlags.NONE, -1, None
+        ).unpack()
+
+    @staticmethod
+    def prop(properties, name, default=None):
+        value = properties.get(name, default)
+        return value.unpack() if isinstance(value, GLib.Variant) else value
+
+    def current_modes(self, monitors):
+        result = {}
+        for monitor_info, modes, _ in monitors:
+            connector = monitor_info[0]
+            for mode in modes:
+                if self.prop(mode[6], "is-current", False):
+                    result[connector] = mode[0]
+                    break
+        return result
+
+    def target_modes(self, monitors):
+        for monitor_info, modes, _ in monitors:
+            if monitor_info[0] == TARGET_CONNECTOR:
+                return modes
+        raise RuntimeError(f"monitor {TARGET_CONNECTOR!r} is not connected")
+
+    def choose_alternate(self, modes, current_id):
+        current = next((mode for mode in modes if mode[0] == current_id), None)
+        if current is None:
+            raise RuntimeError(f"could not find current mode for {TARGET_CONNECTOR}")
+
+        same_size = [
+            mode
+            for mode in modes
+            if mode[0] != current_id
+            and mode[1] == current[1]
+            and mode[2] == current[2]
+        ]
+        candidates = same_size or [mode for mode in modes if mode[0] != current_id]
+        if not candidates:
+            raise RuntimeError(f"no alternate mode available for {TARGET_CONNECTOR}")
+
+        return min(candidates, key=lambda mode: abs(float(mode[3]) - ALT_REFRESH))[0]
+
+    def apply_mode(self, mode_id):
+        serial, monitors, logical_monitors, properties = self.get_state()
+        current_modes = self.current_modes(monitors)
+        if TARGET_CONNECTOR not in current_modes:
+            raise RuntimeError(f"no active mode found for {TARGET_CONNECTOR}")
+
+        configured_logical_monitors = []
+        for x, y, scale, transform, primary, linked_monitors, _ in logical_monitors:
+            configured_monitors = []
+            for connector, _vendor, _product, _serial in linked_monitors:
+                if connector not in current_modes:
+                    raise RuntimeError(f"no active mode found for {connector}")
+                connector_mode = (
+                    mode_id if connector == TARGET_CONNECTOR else current_modes[connector]
+                )
+                configured_monitors.append((connector, connector_mode, {}))
+
+            configured_logical_monitors.append(
+                (x, y, scale, transform, primary, configured_monitors)
+            )
+
+        apply_properties = {}
+        layout_mode = self.prop(properties, "layout-mode")
+        if layout_mode is not None:
+            apply_properties["layout-mode"] = GLib.Variant("u", int(layout_mode))
+
+        parameters = GLib.Variant(
+            "(uua(iiduba(ssa{sv}))a{sv})",
+            (serial, 1, configured_logical_monitors, apply_properties),
+        )
+        self.display_config.call_sync(
+            "ApplyMonitorsConfig", parameters, Gio.DBusCallFlags.NONE, -1, None
+        )
+
+    def schedule(self, delay_seconds):
+        LOG.info("scheduling HDMI remodeset in %.1f seconds", delay_seconds)
+        GLib.timeout_add(int(delay_seconds * 1000), self.remodeset)
+
+    def remodeset(self):
+        if self.running:
+            return False
+        now = time.monotonic()
+        if now - self.last_run < MIN_RETRY_INTERVAL_SECONDS:
+            return False
+
+        self.running = True
+        self.last_run = now
+        try:
+            LOG.info("applying HDMI remodeset workaround")
+            _serial, monitors, _logical, _properties = self.get_state()
+            current_modes = self.current_modes(monitors)
+            original_mode = current_modes[TARGET_CONNECTOR]
+            alternate_mode = self.choose_alternate(
+                self.target_modes(monitors), original_mode
+            )
+
+            LOG.info("switching %s from %s to %s", TARGET_CONNECTOR, original_mode, alternate_mode)
+            self.apply_mode(alternate_mode)
+            time.sleep(MODE_SETTLE_SECONDS)
+            LOG.info("restoring %s mode %s", TARGET_CONNECTOR, original_mode)
+            self.apply_mode(original_mode)
+            LOG.info("HDMI remodeset workaround completed")
+        except Exception:
+            LOG.exception("HDMI remodeset workaround failed")
+        finally:
+            self.running = False
+
+        return False
+
+
+def main():
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    remodesetter = HdmiRemodesetter()
+    loop = GLib.MainLoop()
+    LOG.info("started; waiting for an actual blanked-state wake")
+
+    def on_unlock(
+        _connection, _sender, _path, _interface, _member, parameters, _user_data
+    ):
+        active = parameters.unpack()[0]
+        if active:
+            remodesetter.was_blank = True
+            LOG.info("GNOME reported screen blanked")
+        elif remodesetter.was_blank:
+            remodesetter.was_blank = False
+            LOG.info("GNOME reported wake from blanked state")
+            remodesetter.schedule(UNLOCK_DELAY_SECONDS)
+        else:
+            LOG.info("GNOME reported unlock without a prior blank; skipping workaround")
+
+    session_bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+    session_bus.signal_subscribe(
+        SCREEN_SAVER_BUS,
+        SCREEN_SAVER_BUS,
+        "ActiveChanged",
+        SCREEN_SAVER_PATH,
+        None,
+        Gio.DBusSignalFlags.NONE,
+        on_unlock,
+        None,
+    )
+    loop.run()
+
+
+if __name__ == "__main__":
+    main()
